@@ -1,0 +1,17 @@
+---
+// NewsCard.astro
+const { title, excerpt, image, category, date, slug } = Astro.props;
+---
+<div class="news-card scroll-reveal">
+    <a href={`/post/${slug}/`}>
+        <img src={image} alt={title} class="news-image">
+    </a>
+    <div class="news-content">
+        <span class="category-badge">{category}</span>
+        <h3><a href={`/post/${slug}/`} style="text-decoration:none; color:inherit;">{title}</a></h3>
+        <p dangerouslySetInnerHTML={{ __html: excerpt }}></p>
+        <div class="article-meta">
+            <span>⏰ {date}</span>
+        </div>
+    </div>
+</div>

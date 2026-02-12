@@ -1,0 +1,66 @@
+---
+import '../style/global.css';
+import BaseHead from "../components/BaseHead.astro"
+import Menu from '../components/Menu.astro';
+import Footer from '../components/Footer.astro';
+const response = await fetch(import.meta.env.WORDPRESS_API_URL, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    query: `
+      {
+        menuItems(where: {location: PRIMARY}) {
+          nodes {
+            id
+            label
+            url
+          }
+        }
+      }
+    `,
+  }),
+});
+const res = await response.json();
+const menuItems = res?.data?.menuItems?.nodes || [];
+// Layout.astro
+// interface Props {
+//   title: string;
+// }
+// const { title } = Astro.props as Props;
+---
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <BaseHead />
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+Tamma+2:wght@400..800&family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <div class="main-header">
+            <div class="container">
+                <div class="header-content">
+                    <a href="/" class="logo">Tin<span>Tức</span>24h</a>
+                    <nav>
+                        <Menu menuItems={menuItems} />
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </header>
+    <main>
+        <slot />
+    </main>
+    <Footer/>
+    <script is:inline>
+        const observerOptions = { threshold: 0.1 };
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) entry.target.classList.add('revealed');
+            });
+        }, observerOptions);
+        document.querySelectorAll('.scroll-reveal').forEach(el => observer.observe(el));
+    </script>
+</body>
+</html>
