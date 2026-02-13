@@ -1,86 +1,289 @@
 ---
 // src/pages/index.astro
+
 import Layout from '../layouts/Layout.astro';
 import NewsCard from '../components/NewsCard.astro';
 
-// 1. Fetch dữ liệu từ WordPress
-const response = await fetch(import.meta.env.WORDPRESS_API_URL, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    query: `
-      query GetPosts {
-        posts(first: 6) {
-          nodes {
-            title
-            slug
-            excerpt
-            date
-            featuredImage {
-              node { sourceUrl }
+const WP_URL = import.meta.env.WORDPRESS_API_URL;
+
+if (!WP_URL) {
+  throw new Error('WORDPRESS_API_URL is missing');
+}
+
+/* ---------------- Fetch GraphQL ---------------- */
+
+async function getHomeData() {
+  const res = await fetch(WP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: `
+        query GetPostsAndCategories {
+          posts(first: 6) {
+            nodes {
+              title
+              slug
+              excerpt
+              date
+              featuredImage { node { sourceUrl } }
+              categories { nodes { name } }
             }
-            categories {
-              nodes { name }
+          }
+          categories(first: 8) {
+            nodes {
+              id
+              name
+              slug
+              posts(first: 4) {
+                nodes {
+                  title
+                  slug
+                  excerpt
+                  date
+                  uri
+                  featuredImage { node { sourceUrl } }
+                }
+              }
             }
           }
         }
-      }
-    `,
-  }),
-});
+      `,
+    }),
+  });
 
-const { data } = await response.json();
-const posts = data.posts.nodes;
+  if (!res.ok) {
+    throw new Error(`Fetch failed: ${res.status}`);
+  }
+
+  const json = await res.json();
+
+  if (!json.data) {
+    console.error(json);
+    throw new Error('GraphQL returned empty data');
+  }
+
+  return json.data;
+}
+
+const data = await getHomeData();
+
+/* ---------------- Types ---------------- */
+
+interface Post {
+  title: string;
+  slug: string;
+  excerpt?: string;
+  uri?: string;
+  date?: string;
+  featuredImage?: { node?: { sourceUrl?: string } };
+  categories?: { nodes?: Array<{ name: string }> };
+}
+
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  posts: { nodes: Post[] };
+}
+
+/* ---------------- Helpers ---------------- */
+
+const FALLBACK_IMG = '/images/default.jpg';
+
+const safeImage = (post: Post) =>
+  post.featuredImage?.node?.sourceUrl || FALLBACK_IMG;
+
+const safeCategory = (post: Post) =>
+  post.categories?.nodes?.[0]?.name ?? 'Tin tức';
+
+const formatDate = (date?: string) =>
+  date ? new Date(date).toLocaleDateString('vi-VN') : '';
+
+/* ---------------- Data ---------------- */
+
+const posts: Post[] = data.posts?.nodes ?? [];
+const categories: Category[] = data.categories?.nodes ?? [];
+
+const featuredPost = posts[0];
+const sidebarPosts = posts.slice(1, 4);
 ---
-
 <Layout title="Trang Chủ">
-    <section class="hero">
-        <div class="container">
-            <div class="hero-grid">
-                {posts.slice(0, 1).map(post => (
-                    <div class="featured-article">
-                        <a href={`/post/${post.slug}/`}><img src={post.featuredImage?.node.sourceUrl} class="featured-image" /></a>
-                        <div class="featured-overlay">
-                            <span class="category-badge">{post.categories.nodes[0]?.name}</span>
-                            <h2 class="featured-title">{post.title}</h2>
-							<div class="article-meta">
-								<span>📅 2 giờ trước</span>
-								<span>👁️ 15.234 lượt xem</span>
-								<span>✍️ Nguyễn Văn A</span>
-							</div>
-                        </div>
-                    </div>
-                ))}
-                
-                <div class="sidebar-articles">
-                    {posts.slice(1, 4).map(post => (
-                        <div class="sidebar-article">
-                            <a href={`/post/${post.slug}/`}><img src={post.featuredImage?.node.sourceUrl} class="sidebar-image" /></a>
-                            <div class="sidebar-content">
-                                <h3>{post.title}</h3>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    </section>
 
-    <section class="latest-section">
-        <div class="container">
-            <h2 class="section-title">TIN MỚI NHẤT</h2>
-            <div class="latest-grid">
-                {posts.map(post => (
-                    <NewsCard 
-                        title={post.title}
-                        excerpt={post.excerpt}
-                        image={post.featuredImage?.node.sourceUrl}
-                        category={post.categories.nodes[0]?.name}
-                        date={new Date(post.date).toLocaleDateString('vi-VN')}
-                        slug={post.slug}
-                    />
-                ))}
+  <!-- HERO -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-grid">
+
+        {featuredPost && (
+          <article class="featured-article">
+            <a href={`/post/${featuredPost.slug}/`}>
+              <img
+                src={safeImage(featuredPost)}
+                alt={featuredPost.title}
+                class="featured-image"
+              />
+            </a>
+
+            <div class="featured-overlay">
+              <span class="category-badge">
+                {safeCategory(featuredPost)}
+              </span>
+
+              <h2 class="featured-title">
+                {featuredPost.title}
+              </h2>
+
+              <div class="article-meta">
+                <span>📅 {formatDate(featuredPost.date)}</span>
+              </div>
             </div>
+          </article>
+        )}
+
+        <div class="sidebar-articles">
+          {sidebarPosts.map(post => (
+            <article class="sidebar-article">
+              <a href={`/post/${post.slug}/`}>
+                <img
+                  src={safeImage(post)}
+                  alt={post.title}
+                  class="sidebar-image"
+                />
+              </a>
+
+              <div class="sidebar-content">
+                <h3>{post.title}</h3>
+                <div class="article-meta">
+                  <span>📅 {formatDate(featuredPost.date)}</span>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
-    </section>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- LATEST -->
+  <section class="latest-section">
+    <div class="container">
+      <h2 class="section-title">TIN MỚI NHẤT</h2>
+
+      <div class="latest-grid">
+        {posts.map(post => (
+          <NewsCard
+            title={post.title}
+            excerpt={post.excerpt}
+            image={safeImage(post)}
+            category={safeCategory(post)}
+            date={formatDate(post.date)}
+            slug={post.slug}
+          />
+        ))}
+      </div>
+    </div>
+  </section>
+
+
+  <!-- CATEGORIES -->
+  <section class="categories-section">
+    <div class="container">
+      <h2 class="section-title">DANH MỤC BÀI VIẾT</h2>
+
+      <div class="categories-grid">
+        {categories.map((cat, idx) => (
+          <article class={`category-box variant-${idx % 3}`}>
+            <div class="category-header">
+              <h3>{cat.name}</h3>
+              <a href={`/category/${cat.slug}/`}>Xem tất cả</a>
+            </div>
+
+            <div class="category-posts">
+
+              {cat.posts.nodes.length === 0 && (
+                <p>Chưa có bài viết</p>
+              )}
+
+              {cat.posts.nodes.map((post, pidx) => (
+                <article class={pidx === 0 ? "post-large" : "post-small"}>
+                  <a href={`/post${post.uri}`}>
+
+                    <img
+                      src={safeImage(post)}
+                      alt={post.title}
+                    />
+
+                    <div class="post-meta">
+                      <h4>{post.title}</h4>
+                      <time>{formatDate(post.date)}</time>
+                    </div>
+
+                  </a>
+                </article>
+              ))}
+
+            </div>
+          </article>
+        ))}
+      </div>
+
+    </div>
+  </section>
+
 </Layout>
+<style>
+
+.categories-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  gap:1rem;
+}
+.category-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+.category-posts .post-small a {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    text-decoration: none;
+    color: #000
+}
+a {
+    text-decoration: none;
+    color: #000;
+}
+.category-box{
+  background:white;
+  border:1px solid #eee;
+  padding:1rem;
+}
+
+.variant-0{ background:#f9fbff }
+.variant-1{ background:#fffaf9 }
+.variant-2{ background:#f7fff5 }
+
+.post-large img{
+  width:100%;
+  height:235px;
+  object-fit:cover;
+  border-radius: 8px;
+}
+
+.post-small{
+  display:flex;
+  gap:0.75rem;
+  margin-top:0.75rem;
+}
+
+.post-small img{
+  width:72px;
+  height:72px;
+  object-fit:cover;
+  border-radius:6px;
+}
+
+</style>

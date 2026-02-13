@@ -9,7 +9,7 @@ const { title, excerpt, image, category, date, slug } = Astro.props;
     <div class="news-content">
         <span class="category-badge">{category}</span>
         <h3><a href={`/post/${slug}/`} style="text-decoration:none; color:inherit;">{title}</a></h3>
-        <p dangerouslySetInnerHTML={{ __html: excerpt }}></p>
+        <p set:html={excerpt}></p>
         <div class="article-meta">
             <span>⏰ {date}</span>
         </div>

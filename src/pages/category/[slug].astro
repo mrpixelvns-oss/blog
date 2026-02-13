@@ -1,0 +1,118 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NewsCard from '../../components/NewsCard.astro';
+
+// 1. Tạo đường dẫn cho tất cả chuyên mục hiện có trên WordPress
+export async function getStaticPaths() {
+  const response = await fetch(import.meta.env.WORDPRESS_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: `
+        query GetAllCategories {
+          categories {
+            nodes {
+              slug
+              name
+            }
+          }
+        }
+      `,
+    }),
+  });
+
+  const { data } = await response.json();
+  
+  return data.categories.nodes.map((category: any) => ({
+    params: { slug: category.slug },
+    props: { name: category.name }, // Truyền tên chuyên mục xuống props
+  }));
+}
+
+const { slug } = Astro.params;
+const { name } = Astro.props;
+
+// 2. Lấy danh sách bài viết thuộc chuyên mục này
+const res = await fetch(import.meta.env.WORDPRESS_API_URL, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    query: `
+      query GetPostsByCategory($categoryName: String!) {
+        posts(where: {categoryName: $categoryName}, first: 20) {
+          nodes {
+            title
+            slug
+            excerpt
+            date
+            featuredImage {
+              node {
+                sourceUrl
+              }
+            }
+            categories {
+              nodes {
+                name
+              }
+            }
+          }
+        }
+      }
+    `,
+    variables: { categoryName: slug },
+  }),
+});
+
+const { data: postsData } = await res.json();
+const posts = postsData.posts.nodes;
+---
+
+<Layout title={`Chuyên mục: ${name}`}>
+  <section class="category-header" style="background: var(--color-light-gray); padding: 60px 0; margin-bottom: 40px;">
+    <div class="container">
+      <h1 class="section-title" style="text-transform: uppercase;">{name}</h1>
+      <p style="color: var(--color-gray);">Khám phá những tin tức mới nhất về {name}</p>
+    </div>
+  </section>
+
+  <div class="container">
+    {posts.length > 0 ? (
+      <div class="latest-grid">
+        {posts.map((post: any) => (
+          <NewsCard 
+            title={post.title}
+            excerpt={post.excerpt}
+            image={post.featuredImage?.node.sourceUrl || 'https://via.placeholder.com/400x250'}
+            category={post.categories.nodes[0]?.name}
+            date={new Date(post.date).toLocaleDateString('vi-VN')}
+            slug={post.slug}
+          />
+        ))}
+      </div>
+    ) : (
+      <div style="text-align: center; padding: 100px 0;">
+        <p>Hiện chưa có bài viết nào trong chuyên mục này.</p>
+        <a href="/" style="color: var(--color-accent);">Quay lại trang chủ</a>
+      </div>
+    )}
+  </div>
+</Layout>
+
+<style>
+  /* Bạn có thể tái sử dụng class .latest-grid từ file CSS gốc 
+     để hiển thị danh sách bài viết theo cột như trang chủ 
+  */
+  .latest-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 30px;
+    margin-bottom: 60px;
+  }
+
+  @media (max-width: 1024px) {
+    .latest-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 768px) {
+    .latest-grid { grid-template-columns: 1fr; }
+  }
+</style>

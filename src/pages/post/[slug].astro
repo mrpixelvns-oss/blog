@@ -3,19 +3,44 @@ import Layout from '../../layouts/Layout.astro';
 
 // 1. Lấy tất cả slug từ WordPress để Astro biết cần tạo bao nhiêu trang
 export async function getStaticPaths() {
-  const response = await fetch(import.meta.env.WORDPRESS_API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query: `{ posts { nodes { slug } } }`,
-    }),
-  });
-  const { data } = await response.json();
-  return data.posts.nodes.map((post: any) => ({
-    params: { slug: post.slug },
+  let allPosts = [];
+  let hasNextPage = true;
+  let cursor = null;
+
+  while (hasNextPage) {
+    const res = await fetch(import.meta.env.WORDPRESS_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: `
+          query GetPosts($cursor: String) {
+            posts(first: 50, after: $cursor) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              nodes {
+                slug
+              }
+            }
+          }
+        `,
+        variables: { cursor }
+      })
+    });
+
+    const json = await res.json();
+
+    allPosts.push(...json.data.posts.nodes);
+
+    hasNextPage = json.data.posts.pageInfo.hasNextPage;
+    cursor = json.data.posts.pageInfo.endCursor;
+  }
+
+  return allPosts.map(post => ({
+    params: { slug: post.slug }
   }));
 }
-
 // 2. Lấy dữ liệu chi tiết của 1 bài viết dựa trên slug
 const { slug } = Astro.params;
 const res = await fetch(import.meta.env.WORDPRESS_API_URL, {
@@ -38,13 +63,12 @@ const res = await fetch(import.meta.env.WORDPRESS_API_URL, {
 const { data } = await res.json();
 const post = data.post;
 ---
-
 <Layout title={post.title}>
   <article class="container" style="padding: 60px 20px;">
-    <header style="margin-bottom: 40px;">
+    <div class="hd_post" style="margin-bottom: 40px;">
         <h1 style="font-family: var(--font-display); font-size: 48px;">{post.title}</h1>
         <p>Ngày đăng: {new Date(post.date).toLocaleDateString('vi-VN')}</p>
-    </header>
+    </div>
     
     {post.featuredImage && (
       <img src={post.featuredImage.node.sourceUrl} style="width: 100%; border-radius: 16px; margin-bottom: 40px;" />
@@ -55,6 +79,12 @@ const post = data.post;
 </Layout>
 
 <style>
+  .post-content figure {
+        width: 100% !important;
+    }
+    .post-content figure {
+    width: 100% !important;
+}
   /* Bạn có thể thêm CSS riêng cho nội dung bài viết ở đây */
   .post-content :global(p) { margin-bottom: 20px; line-height: 1.8; }
   .post-content :global(img) { max-width: 100%; height: auto; border-radius: 8px; }
